@@ -1,0 +1,21 @@
+{
+  "manifest_version": 3,
+  "name": "AI Learning Planner - Capture",
+  "version": "0.1.0",
+  "description": "Capture course pages to your AI Learning Planner.",
+  "permissions": ["activeTab", "scripting"],
+  "host_permissions": ["<all_urls>"],
+  "action": {
+    "default_title": "Capture to Planner"
+  },
+  "background": {
+    "service_worker": "service-worker.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"],
+      "run_at": "document_end"
+    }
+  ]
+}
