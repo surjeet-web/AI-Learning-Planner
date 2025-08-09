@@ -71,7 +71,7 @@ export function AddCourseDialog({ open = false, onOpenChange = () => {}, onAdded
       return
     }
     const course: Course = {
-      id: crypto.randomUUID(),
+      id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
       title: title.trim(),
       description: description.trim(),
       url: url.trim(),

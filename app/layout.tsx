@@ -4,6 +4,7 @@ import { GeistSans } from "geist/font/sans"
 import { GeistMono } from "geist/font/mono"
 import "./globals.css"
 import { ReduxProvider } from "@/components/redux-provider"
+import { ErrorBoundary } from "@/components/error-boundary"
 
 export const metadata: Metadata = {
   title: "v0 App",
@@ -27,8 +28,10 @@ html {
 }
         `}</style>
       </head>
-      <body>
-        <ReduxProvider>{children}</ReduxProvider>
+      <body suppressHydrationWarning={true}>
+        <ErrorBoundary>
+          <ReduxProvider>{children}</ReduxProvider>
+        </ErrorBoundary>
       </body>
     </html>
   )

@@ -13,6 +13,7 @@ import { ExternalLink, RefreshCw, Check } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { CourseTimer } from "@/components/course-timer"
+import { CourseNotes } from "@/components/course-notes"
 import { Checkbox } from "@/components/ui/checkbox"
 import { useToast } from "@/hooks/use-toast"
 import { autoProcessCourse } from "@/lib/auto-process"
@@ -166,8 +167,18 @@ export default function CourseDetailPage() {
 
         <Card className="md:col-span-2">
           <CardHeader>
-            <CardTitle>Notes</CardTitle>
-            <CardDescription>Add any personal notes about this course.</CardDescription>
+            <CardTitle>Course Notes</CardTitle>
+            <CardDescription>Manage your notes for this course.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <CourseNotes courseId={course.id} />
+          </CardContent>
+        </Card>
+
+        <Card className="md:col-span-2">
+          <CardHeader>
+            <CardTitle>Quick Notes</CardTitle>
+            <CardDescription>Simple text notes about this course.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-2">
             <Input
