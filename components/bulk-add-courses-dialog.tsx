@@ -5,7 +5,6 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
-  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
@@ -23,23 +22,20 @@ import {
   Upload, 
   Link as LinkIcon, 
   FileText,
-  Trash2,
-  RefreshCw,
-  Download,
-  Eye,
-  EyeOff,
   Youtube,
-  PlayCircle,
-  Zap
+  Zap,
+  Globe,
+  Sparkles,
+  ArrowRight,
+  Search,
+  RotateCcw
 } from "lucide-react"
 import { Progress } from "@/components/ui/progress"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Separator } from "@/components/ui/separator"
 import { generateId } from "@/lib/utils"
-import { YouTubeParser } from "@/lib/youtube-utils"
 import { YouTubePlaylistImporter } from "./youtube-playlist-importer"
 
 type Props = {
@@ -70,25 +66,20 @@ export function BulkAddCoursesDialog({ open = false, onOpenChange = () => {}, on
   const [results, setResults] = React.useState<ProcessingResult[]>([])
   const [progress, setProgress] = React.useState(0)
   const [currentProcessing, setCurrentProcessing] = React.useState("")
-  const [showDetails, setShowDetails] = React.useState(true)
-  const [batchSize, setBatchSize] = React.useState(3)
-  const [retryFailed, setRetryFailed] = React.useState(false)
   const [youtubeImporterOpen, setYoutubeImporterOpen] = React.useState(false)
+  const [activeTab, setActiveTab] = React.useState("input")
 
   const parseUrls = (text: string): string[] => {
-    // More robust URL parsing
     const lines = text.split('\n').map(line => line.trim()).filter(line => line)
     const urls: string[] = []
     
     lines.forEach(line => {
-      // Extract URLs from each line
       const urlRegex = /https?:\/\/[^\s<>"{}|\\^`[\]]+/g
       const matches = line.match(urlRegex) || []
       urls.push(...matches)
     })
     
-    // Remove duplicates and validate
-    const uniqueUrls = Array.from(new Set(urls)).filter(url => {
+    return Array.from(new Set(urls)).filter(url => {
       try {
         new URL(url)
         return true
@@ -96,38 +87,19 @@ export function BulkAddCoursesDialog({ open = false, onOpenChange = () => {}, on
         return false
       }
     })
-    
-    return uniqueUrls
-  }
-
-  const detectYouTubeUrls = (text: string): { youtube: string[], other: string[] } => {
-    const urls = parseUrls(text)
-    const youtube: string[] = []
-    const other: string[] = []
-    
-    urls.forEach(url => {
-      if (url.includes('youtube.com') || url.includes('youtu.be')) {
-        youtube.push(url)
-      } else {
-        other.push(url)
-      }
-    })
-    
-    return { youtube, other }
   }
 
   const processSingleUrl = async (url: string): Promise<ProcessingResult> => {
     const resultId = generateId()
     
     try {
-      // Validate URL first
       const urlObj = new URL(url)
       if (!['http:', 'https:'].includes(urlObj.protocol)) {
         throw new Error('Invalid protocol. Only HTTP and HTTPS are supported.')
       }
 
       const controller = new AbortController()
-      const timeoutId = setTimeout(() => controller.abort(), 15000) // 15 second timeout
+      const timeoutId = setTimeout(() => controller.abort(), 15000)
 
       const res = await fetch("/api/scrape", {
         method: "POST",
@@ -198,33 +170,6 @@ export function BulkAddCoursesDialog({ open = false, onOpenChange = () => {}, on
     }
   }
 
-  const processBatch = async (urls: string[], startIndex: number) => {
-    const batch = urls.slice(startIndex, startIndex + batchSize)
-    const promises = batch.map(async (url, index) => {
-      setCurrentProcessing(url)
-      const result = await processSingleUrl(url)
-      
-      // Update individual result
-      setResults(prev => {
-        const newResults = [...prev]
-        const existingIndex = newResults.findIndex(r => r.url === url)
-        if (existingIndex >= 0) {
-          newResults[existingIndex] = result
-        }
-        return newResults
-      })
-      
-      // Small delay between requests in the same batch
-      if (index < batch.length - 1) {
-        await new Promise(resolve => setTimeout(resolve, 200))
-      }
-      
-      return result
-    })
-    
-    await Promise.all(promises)
-  }
-
   const handleBulkProcess = async () => {
     const urlList = parseUrls(urls)
     
@@ -250,7 +195,6 @@ export function BulkAddCoursesDialog({ open = false, onOpenChange = () => {}, on
     setProgress(0)
     setCurrentProcessing("")
 
-    // Initialize results with pending status
     const initialResults: ProcessingResult[] = urlList.map(url => ({
       id: generateId(),
       url,
@@ -260,21 +204,26 @@ export function BulkAddCoursesDialog({ open = false, onOpenChange = () => {}, on
     setResults(initialResults)
 
     try {
-      // Process in batches to avoid overwhelming the server
-      for (let i = 0; i < urlList.length; i += batchSize) {
-        await processBatch(urlList, i)
-        setProgress(Math.min(((i + batchSize) / urlList.length) * 100, 100))
+      for (let i = 0; i < urlList.length; i++) {
+        const url = urlList[i]
+        setCurrentProcessing(url)
+        const result = await processSingleUrl(url)
         
-        // Delay between batches
-        if (i + batchSize < urlList.length) {
-          await new Promise(resolve => setTimeout(resolve, 1000))
+        setResults(prev => prev.map(r => 
+          r.url === url ? result : r
+        ))
+        
+        setProgress(((i + 1) / urlList.length) * 100)
+        
+        if (i < urlList.length - 1) {
+          await new Promise(resolve => setTimeout(resolve, 500))
         }
       }
     } catch (error) {
-      console.error('Batch processing error:', error)
+      console.error('Processing error:', error)
       toast({
         title: "Processing interrupted",
-        description: "Some URLs may not have been processed. Check the results below.",
+        description: "Some URLs may not have been processed.",
         variant: "destructive"
       })
     }
@@ -287,31 +236,10 @@ export function BulkAddCoursesDialog({ open = false, onOpenChange = () => {}, on
     const errorCount = results.filter(r => r.status === "error").length
     
     toast({
-      title: "Bulk processing completed",
+      title: "Processing completed",
       description: `${successCount} courses processed successfully, ${errorCount} failed.`,
       variant: successCount > 0 ? "default" : "destructive"
     })
-  }
-
-  const handleRetryFailed = async () => {
-    const failedResults = results.filter(r => r.status === "error")
-    if (failedResults.length === 0) return
-
-    setRetryFailed(true)
-    
-    for (const failedResult of failedResults) {
-      setCurrentProcessing(failedResult.url)
-      const newResult = await processSingleUrl(failedResult.url)
-      
-      setResults(prev => prev.map(r => 
-        r.id === failedResult.id ? newResult : r
-      ))
-      
-      await new Promise(resolve => setTimeout(resolve, 500))
-    }
-    
-    setRetryFailed(false)
-    setCurrentProcessing("")
   }
 
   const handleSaveSuccessful = () => {
@@ -322,35 +250,15 @@ export function BulkAddCoursesDialog({ open = false, onOpenChange = () => {}, on
     if (successfulCourses.length > 0) {
       onAdded(successfulCourses)
       onOpenChange(false)
-      resetState()
+      setUrls("")
+      setResults([])
+      setProgress(0)
+      setCurrentProcessing("")
     }
-  }
-
-  const resetState = () => {
-    setUrls("")
-    setResults([])
-    setProgress(0)
-    setCurrentProcessing("")
-  }
-
-  const handleRemoveResult = (id: string) => {
-    setResults(prev => prev.filter(r => r.id !== id))
   }
 
   const loadExampleUrls = () => {
     setUrls(EXAMPLE_URLS)
-  }
-
-  const exportResults = () => {
-    const successfulCourses = results.filter(r => r.status === "success" && r.course)
-    const dataStr = JSON.stringify(successfulCourses.map(r => r.course), null, 2)
-    const dataBlob = new Blob([dataStr], { type: 'application/json' })
-    const url = URL.createObjectURL(dataBlob)
-    const link = document.createElement('a')
-    link.href = url
-    link.download = 'bulk-imported-courses.json'
-    link.click()
-    URL.revokeObjectURL(url)
   }
 
   const getStatusIcon = (status: ProcessingResult["status"]) => {
@@ -361,8 +269,6 @@ export function BulkAddCoursesDialog({ open = false, onOpenChange = () => {}, on
         return <XCircle className="h-4 w-4 text-red-500" />
       case "pending":
         return <Loader2 className="h-4 w-4 animate-spin text-blue-500" />
-      case "skipped":
-        return <AlertCircle className="h-4 w-4 text-yellow-500" />
       default:
         return <AlertCircle className="h-4 w-4 text-gray-500" />
     }
@@ -373,7 +279,6 @@ export function BulkAddCoursesDialog({ open = false, onOpenChange = () => {}, on
       case "success": return "border-green-200 bg-green-50"
       case "error": return "border-red-200 bg-red-50"
       case "pending": return "border-blue-200 bg-blue-50"
-      case "skipped": return "border-yellow-200 bg-yellow-50"
       default: return "border-gray-200 bg-gray-50"
     }
   }
@@ -385,335 +290,314 @@ export function BulkAddCoursesDialog({ open = false, onOpenChange = () => {}, on
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl max-h-[90vh] overflow-hidden" aria-describedby="bulk-add-desc">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <Upload className="h-5 w-5" />
-            Bulk Import Courses
-          </DialogTitle>
-          <DialogDescription id="bulk-add-desc">
-            Import multiple courses at once by pasting URLs. Supports most learning platforms.
-          </DialogDescription>
-        </DialogHeader>
-        
-        <Tabs defaultValue="input" className="flex-1">
-          <TabsList className="grid w-full grid-cols-3">
-            <TabsTrigger value="input" className="flex items-center gap-2">
-              <LinkIcon className="h-4 w-4" />
-              Input URLs
-            </TabsTrigger>
-            <TabsTrigger value="youtube" className="flex items-center gap-2">
-              <Youtube className="h-4 w-4" />
-              YouTube
-            </TabsTrigger>
-            <TabsTrigger value="results" className="flex items-center gap-2">
-              <FileText className="h-4 w-4" />
-              Results ({results.length})
-            </TabsTrigger>
-          </TabsList>
-
-          <TabsContent value="youtube" className="space-y-4">
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Youtube className="h-5 w-5 text-red-500" />
-                  YouTube Import
-                </CardTitle>
-                <CardDescription>
-                  Import YouTube playlists, videos, or channels with advanced options
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <Card className="p-4">
-                    <div className="flex items-center gap-3">
-                      <PlayCircle className="h-8 w-8 text-red-500" />
-                      <div>
-                        <h4 className="font-medium">Playlist Import</h4>
-                        <p className="text-sm text-muted-foreground">
-                          Import entire playlists with metadata
-                        </p>
-                      </div>
-                    </div>
-                  </Card>
-                  
-                  <Card className="p-4">
-                    <div className="flex items-center gap-3">
-                      <Zap className="h-8 w-8 text-yellow-500" />
-                      <div>
-                        <h4 className="font-medium">Smart Processing</h4>
-                        <p className="text-sm text-muted-foreground">
-                          Automatic metadata extraction and tagging
-                        </p>
-                      </div>
-                    </div>
-                  </Card>
+      <DialogContent className="max-w-6xl max-h-[95vh] overflow-hidden p-0" aria-describedby="bulk-add-desc">
+        {/* Modern Header */}
+        <div className="relative bg-gradient-to-r from-blue-600 via-purple-600 to-indigo-600 p-6 text-white">
+          <div className="absolute inset-0 bg-black/10"></div>
+          <div className="relative">
+            <DialogHeader className="space-y-3">
+              <DialogTitle className="flex items-center gap-3 text-2xl font-bold">
+                <div className="p-2 bg-white/20 rounded-lg backdrop-blur-sm">
+                  <Sparkles className="h-6 w-6" />
                 </div>
-                
-                <Button 
-                  onClick={() => setYoutubeImporterOpen(true)}
-                  className="w-full"
-                  size="lg"
-                >
-                  <Youtube className="mr-2 h-5 w-5" />
-                  Open YouTube Importer
-                </Button>
-                
-                <div className="text-xs text-muted-foreground space-y-1">
-                  <p>• Supports playlists, individual videos, and channels</p>
-                  <p>• Extracts titles, descriptions, thumbnails, and tags</p>
-                  <p>• Batch processing with progress tracking</p>
-                  <p>• Advanced filtering and sorting options</p>
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          <TabsContent value="input" className="space-y-4">
-            <div className="grid gap-4">
-              <div className="flex items-center justify-between">
-                <Label htmlFor="urls">Course URLs</Label>
-                <div className="flex gap-2">
-                  <Button variant="outline" size="sm" onClick={loadExampleUrls}>
-                    Load Examples
-                  </Button>
-                  <Button variant="outline" size="sm" onClick={() => setUrls("")}>
-                    Clear
-                  </Button>
-                </div>
+                Advanced Course Importer
+              </DialogTitle>
+              <DialogDescription id="bulk-add-desc" className="text-blue-100 text-lg">
+                Import courses from multiple sources with AI-powered processing
+              </DialogDescription>
+            </DialogHeader>
+            
+            <div className="flex items-center gap-6 mt-4">
+              <div className="flex items-center gap-2">
+                <Globe className="h-4 w-4 text-blue-200" />
+                <span className="text-sm text-blue-100">Multi-platform</span>
               </div>
-              
-              <Textarea
-                id="urls"
-                placeholder="Paste URLs here (one per line)..."
-                value={urls}
-                onChange={(e) => setUrls(e.target.value)}
-                rows={8}
-                disabled={processing}
-                className="font-mono text-sm"
-              />
-              
-              <div className="space-y-2">
-                <div className="flex items-center justify-between text-sm text-muted-foreground">
-                  <span>Found {urlList.length} valid URLs</span>
-                  {urlList.length > 50 && (
-                    <span className="text-red-500">Limit: 50 URLs per batch</span>
-                  )}
-                </div>
-                
-                {(() => {
-                  const { youtube, other } = detectYouTubeUrls(urls)
-                  if (youtube.length > 0) {
-                    return (
-                      <div className="flex items-center gap-2 p-2 bg-red-50 border border-red-200 rounded text-sm">
-                        <Youtube className="h-4 w-4 text-red-500" />
-                        <span>
-                          {youtube.length} YouTube URL{youtube.length > 1 ? 's' : ''} detected. 
-                          Consider using the YouTube tab for better results.
-                        </span>
-                      </div>
-                    )
-                  }
-                  return null
-                })()}
+              <div className="flex items-center gap-2">
+                <Zap className="h-4 w-4 text-yellow-300" />
+                <span className="text-sm text-blue-100">AI-powered</span>
               </div>
-
-              <Card>
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-sm">Processing Settings</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  <div className="flex items-center gap-4">
-                    <Label htmlFor="batch-size" className="text-sm">Batch Size:</Label>
-                    <Input
-                      id="batch-size"
-                      type="number"
-                      min="1"
-                      max="10"
-                      value={batchSize}
-                      onChange={(e) => setBatchSize(Math.max(1, Math.min(10, parseInt(e.target.value) || 3)))}
-                      className="w-20"
-                      disabled={processing}
-                    />
-                    <span className="text-xs text-muted-foreground">
-                      Smaller batches are more reliable but slower
-                    </span>
-                  </div>
-                </CardContent>
-              </Card>
+              <div className="flex items-center gap-2">
+                <CheckCircle className="h-4 w-4 text-green-300" />
+                <span className="text-sm text-blue-100">Batch processing</span>
+              </div>
             </div>
+          </div>
+        </div>
 
-            {processing && (
-              <Card>
-                <CardContent className="pt-6">
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm font-medium">Processing URLs...</span>
-                      <span className="text-sm text-muted-foreground">{Math.round(progress)}%</span>
+        <div className="p-6">
+          <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
+            <TabsList className="grid w-full grid-cols-3 h-12 p-1 bg-muted/50">
+              <TabsTrigger value="input" className="flex items-center gap-2">
+                <LinkIcon className="h-4 w-4" />
+                <span className="hidden sm:inline">Bulk URLs</span>
+              </TabsTrigger>
+              <TabsTrigger value="youtube" className="flex items-center gap-2">
+                <Youtube className="h-4 w-4" />
+                <span className="hidden sm:inline">YouTube</span>
+              </TabsTrigger>
+              <TabsTrigger value="results" className="flex items-center gap-2">
+                <FileText className="h-4 w-4" />
+                <span className="hidden sm:inline">Results</span>
+                {results.length > 0 && (
+                  <Badge variant="secondary" className="ml-1 h-5 text-xs">
+                    {results.length}
+                  </Badge>
+                )}
+              </TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="youtube" className="space-y-6">
+              <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-red-500 via-red-600 to-red-700 p-8 text-white">
+                <div className="relative">
+                  <div className="flex items-center gap-4 mb-4">
+                    <div className="p-3 bg-white/20 rounded-xl backdrop-blur-sm">
+                      <Youtube className="h-8 w-8" />
                     </div>
-                    <Progress value={progress} className="w-full" />
-                    {currentProcessing && (
-                      <div className="text-xs text-muted-foreground truncate">
-                        Current: {currentProcessing}
+                    <div>
+                      <h3 className="text-2xl font-bold">YouTube Importer</h3>
+                      <p className="text-red-100">Import playlists, videos, and channels with ease</p>
+                    </div>
+                  </div>
+                  
+                  <Button 
+                    onClick={() => setYoutubeImporterOpen(true)}
+                    size="lg"
+                    className="bg-white text-red-600 hover:bg-red-50 font-semibold px-8"
+                  >
+                    <Youtube className="mr-2 h-5 w-5" />
+                    Launch YouTube Importer
+                    <ArrowRight className="ml-2 h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+            </TabsContent>
+
+            <TabsContent value="input" className="space-y-6">
+              <Card className="border-2 border-dashed border-muted-foreground/25 hover:border-primary/50 transition-colors">
+                <CardContent className="p-6">
+                  <div className="text-center space-y-4">
+                    <div className="mx-auto w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center">
+                      <Upload className="h-8 w-8 text-primary" />
+                    </div>
+                    <div>
+                      <h3 className="text-lg font-semibold">Paste Your URLs</h3>
+                      <p className="text-muted-foreground">Drop multiple course URLs here for batch processing</p>
+                    </div>
+                  </div>
+                  
+                  <div className="mt-6 space-y-4">
+                    <div className="flex items-center justify-between">
+                      <Label htmlFor="urls" className="text-base font-medium">Course URLs</Label>
+                      <div className="flex gap-2">
+                        <Button variant="outline" size="sm" onClick={loadExampleUrls}>
+                          <Sparkles className="h-4 w-4 mr-1" />
+                          Examples
+                        </Button>
+                        <Button variant="outline" size="sm" onClick={() => setUrls("")}>
+                          <RotateCcw className="h-4 w-4 mr-1" />
+                          Clear
+                        </Button>
                       </div>
-                    )}
+                    </div>
+                    
+                    <Textarea
+                      id="urls"
+                      placeholder="Paste your course URLs here (one per line)..."
+                      value={urls}
+                      onChange={(e) => setUrls(e.target.value)}
+                      rows={10}
+                      disabled={processing}
+                      className="font-mono text-sm resize-none"
+                    />
+                    
+                    <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
+                      <div className="flex items-center gap-2">
+                        <Search className="h-4 w-4 text-muted-foreground" />
+                        <span className="text-sm font-medium">Found {urlList.length} valid URLs</span>
+                      </div>
+                      {urlList.length > 50 && (
+                        <Badge variant="destructive" className="text-xs">
+                          Limit: 50 URLs per batch
+                        </Badge>
+                      )}
+                    </div>
                   </div>
                 </CardContent>
               </Card>
-            )}
-          </TabsContent>
 
-          <TabsContent value="results" className="space-y-4">
-            {hasResults && (
-              <>
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-4">
-                    <Badge variant="outline" className="text-green-600">
-                      ✓ {successfulResults.length} Success
-                    </Badge>
-                    <Badge variant="outline" className="text-red-600">
-                      ✗ {errorResults.length} Failed
-                    </Badge>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setShowDetails(!showDetails)}
-                    >
-                      {showDetails ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                      {showDetails ? "Hide" : "Show"} Details
-                    </Button>
-                    {successfulResults.length > 0 && (
-                      <Button variant="outline" size="sm" onClick={exportResults}>
-                        <Download className="h-4 w-4 mr-1" />
-                        Export
-                      </Button>
-                    )}
-                    {errorResults.length > 0 && (
-                      <Button 
-                        variant="outline" 
-                        size="sm" 
-                        onClick={handleRetryFailed}
-                        disabled={retryFailed}
-                      >
-                        {retryFailed ? (
-                          <Loader2 className="h-4 w-4 animate-spin mr-1" />
-                        ) : (
-                          <RefreshCw className="h-4 w-4 mr-1" />
-                        )}
-                        Retry Failed
-                      </Button>
-                    )}
-                  </div>
-                </div>
-
-                <ScrollArea className="h-96 w-full border rounded-md">
-                  <div className="p-4 space-y-2">
-                    {results.map((result) => (
-                      <Card key={result.id} className={`${getStatusColor(result.status)} transition-colors`}>
-                        <CardContent className="p-3">
-                          <div className="flex items-start gap-3">
-                            {getStatusIcon(result.status)}
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center justify-between">
-                                <h4 className="text-sm font-medium truncate">
-                                  {result.title || result.url}
-                                </h4>
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  className="h-6 w-6 p-0"
-                                  onClick={() => handleRemoveResult(result.id)}
-                                >
-                                  <Trash2 className="h-3 w-3" />
-                                </Button>
-                              </div>
-                              
-                              <div className="text-xs text-muted-foreground truncate mt-1">
-                                {result.url}
-                              </div>
-                              
-                              {result.error && (
-                                <div className="text-xs text-red-600 mt-1 p-2 bg-red-50 rounded">
-                                  {result.error}
-                                </div>
-                              )}
-                              
-                              {showDetails && result.course && (
-                                <div className="mt-2 space-y-1">
-                                  {result.course.description && (
-                                    <p className="text-xs text-muted-foreground line-clamp-2">
-                                      {result.course.description}
-                                    </p>
-                                  )}
-                                  {result.course.tags.length > 0 && (
-                                    <div className="flex flex-wrap gap-1">
-                                      {result.course.tags.slice(0, 5).map((tag, i) => (
-                                        <Badge key={i} variant="secondary" className="text-xs">
-                                          {tag}
-                                        </Badge>
-                                      ))}
-                                      {result.course.tags.length > 5 && (
-                                        <Badge variant="outline" className="text-xs">
-                                          +{result.course.tags.length - 5}
-                                        </Badge>
-                                      )}
-                                    </div>
-                                  )}
-                                </div>
-                              )}
-                            </div>
+              {processing && (
+                <Card className="border-primary/50 bg-primary/5">
+                  <CardContent className="p-6">
+                    <div className="space-y-4">
+                      <div className="flex items-center gap-3">
+                        <Loader2 className="h-5 w-5 animate-spin text-primary" />
+                        <div>
+                          <div className="font-medium">Processing URLs...</div>
+                          <div className="text-sm text-muted-foreground">
+                            {Math.round(progress)}% complete
                           </div>
-                        </CardContent>
-                      </Card>
-                    ))}
-                  </div>
-                </ScrollArea>
-              </>
-            )}
-          </TabsContent>
-        </Tabs>
+                        </div>
+                      </div>
+                      
+                      <Progress value={progress} className="w-full h-2" />
+                      
+                      {currentProcessing && (
+                        <div className="p-3 bg-white/50 rounded-lg">
+                          <div className="text-xs font-medium text-muted-foreground mb-1">Currently processing:</div>
+                          <div className="text-sm font-mono truncate">{currentProcessing}</div>
+                        </div>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+            </TabsContent>
 
-        <Separator />
-
-        <DialogFooter className="flex gap-2">
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Cancel
-          </Button>
-          
-          {!hasResults ? (
-            <Button 
-              onClick={handleBulkProcess} 
-              disabled={processing || urlList.length === 0 || urlList.length > 50}
-            >
-              {processing ? (
+            <TabsContent value="results" className="space-y-6">
+              {hasResults ? (
                 <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Processing...
+                  <div className="grid gap-4 sm:grid-cols-3">
+                    <Card className="bg-green-50 border-green-200">
+                      <CardContent className="p-4">
+                        <div className="flex items-center gap-3">
+                          <div className="p-2 bg-green-100 rounded-lg">
+                            <CheckCircle className="h-5 w-5 text-green-600" />
+                          </div>
+                          <div>
+                            <div className="text-2xl font-bold text-green-700">{successfulResults.length}</div>
+                            <div className="text-sm text-green-600">Successful</div>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                    
+                    <Card className="bg-red-50 border-red-200">
+                      <CardContent className="p-4">
+                        <div className="flex items-center gap-3">
+                          <div className="p-2 bg-red-100 rounded-lg">
+                            <XCircle className="h-5 w-5 text-red-600" />
+                          </div>
+                          <div>
+                            <div className="text-2xl font-bold text-red-700">{errorResults.length}</div>
+                            <div className="text-sm text-red-600">Failed</div>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                    
+                    <Card className="bg-blue-50 border-blue-200">
+                      <CardContent className="p-4">
+                        <div className="flex items-center gap-3">
+                          <div className="p-2 bg-blue-100 rounded-lg">
+                            <FileText className="h-5 w-5 text-blue-600" />
+                          </div>
+                          <div>
+                            <div className="text-2xl font-bold text-blue-700">{results.length}</div>
+                            <div className="text-sm text-blue-600">Total</div>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </div>
+
+                  <ScrollArea className="h-96 w-full">
+                    <div className="space-y-3">
+                      {results.map((result) => (
+                        <Card key={result.id} className={`${getStatusColor(result.status)} transition-all hover:shadow-md`}>
+                          <CardContent className="p-4">
+                            <div className="flex items-start gap-4">
+                              <div className="flex-shrink-0 mt-1">
+                                {getStatusIcon(result.status)}
+                              </div>
+                              
+                              <div className="flex-1 min-w-0">
+                                <h4 className="font-medium text-sm truncate">
+                                  {result.title || new URL(result.url).hostname}
+                                </h4>
+                                <div className="text-xs text-muted-foreground truncate mt-1">
+                                  {result.url}
+                                </div>
+                                
+                                {result.error && (
+                                  <div className="mt-2 p-2 bg-red-50 border border-red-200 rounded text-xs text-red-700">
+                                    <div className="font-medium">Error:</div>
+                                    <div>{result.error}</div>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      ))}
+                    </div>
+                  </ScrollArea>
                 </>
               ) : (
-                <>
-                  <Upload className="mr-2 h-4 w-4" />
-                  Process {urlList.length} URLs
-                </>
+                <div className="text-center py-12">
+                  <div className="mx-auto w-16 h-16 bg-muted rounded-full flex items-center justify-center mb-4">
+                    <FileText className="h-8 w-8 text-muted-foreground" />
+                  </div>
+                  <h3 className="text-lg font-medium mb-2">No results yet</h3>
+                  <p className="text-muted-foreground mb-4">Process some URLs to see results here</p>
+                  <Button variant="outline" onClick={() => setActiveTab("input")}>
+                    <ArrowRight className="h-4 w-4 mr-1" />
+                    Go to Input
+                  </Button>
+                </div>
               )}
-            </Button>
-          ) : (
-            <>
-              <Button variant="outline" onClick={resetState}>
-                Start Over
+            </TabsContent>
+          </Tabs>
+        </div>
+
+        {/* Modern Footer */}
+        <div className="border-t bg-muted/30 p-6">
+          <div className="flex items-center justify-between">
+            <div className="text-sm text-muted-foreground">
+              {hasResults ? (
+                <span>{successfulResults.length} of {results.length} URLs processed successfully</span>
+              ) : (
+                <span>Ready to process {urlList.length} URLs</span>
+              )}
+            </div>
+            
+            <div className="flex items-center gap-3">
+              <Button variant="outline" onClick={() => onOpenChange(false)}>
+                Cancel
               </Button>
-              <Button 
-                onClick={handleSaveSuccessful}
-                disabled={successfulResults.length === 0}
-              >
-                <CheckCircle className="mr-2 h-4 w-4" />
-                Import {successfulResults.length} Courses
-              </Button>
-            </>
-          )}
-        </DialogFooter>
+              
+              {!hasResults ? (
+                <Button 
+                  onClick={handleBulkProcess} 
+                  disabled={processing || urlList.length === 0 || urlList.length > 50}
+                  size="lg"
+                  className="px-8"
+                >
+                  {processing ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Processing...
+                    </>
+                  ) : (
+                    <>
+                      <Zap className="mr-2 h-4 w-4" />
+                      Process {urlList.length} URLs
+                    </>
+                  )}
+                </Button>
+              ) : (
+                <Button 
+                  onClick={handleSaveSuccessful}
+                  disabled={successfulResults.length === 0}
+                  size="lg"
+                  className="px-8"
+                >
+                  <CheckCircle className="mr-2 h-4 w-4" />
+                  Import {successfulResults.length} Courses
+                </Button>
+              )}
+            </div>
+          </div>
+        </div>
       </DialogContent>
       
       <YouTubePlaylistImporter

@@ -2,21 +2,26 @@
 
 import { useEffect, useState } from "react"
 
-type Props = {
+interface ClientOnlyProps {
   children: React.ReactNode
   fallback?: React.ReactNode
 }
 
-export function ClientOnly({ children, fallback = null }: Props) {
+export function ClientOnly({ children, fallback = null }: ClientOnlyProps) {
   const [hasMounted, setHasMounted] = useState(false)
 
   useEffect(() => {
-    setHasMounted(true)
+    // Use a small delay to ensure DOM is fully ready
+    const timer = setTimeout(() => {
+      setHasMounted(true)
+    }, 0)
+    
+    return () => clearTimeout(timer)
   }, [])
 
   if (!hasMounted) {
-    return <>{fallback}</>
+    return <div suppressHydrationWarning>{fallback}</div>
   }
 
-  return <>{children}</>
+  return <div suppressHydrationWarning>{children}</div>
 }

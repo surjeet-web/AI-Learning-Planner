@@ -5,7 +5,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Separator } from "@/components/ui/separator"
-import { Plus, Sparkles, BarChart3, Library, Presentation, Timer, Sun, Moon, ChevronDown, Upload, StickyNote } from "lucide-react"
+import { Plus, Sparkles, BarChart3, Library, Presentation, Timer, Sun, Moon, ChevronDown, Upload, StickyNote, Mic } from "lucide-react"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -29,6 +29,9 @@ import { OfflineBanner } from "@/components/offline-banner"
 import { useToast } from "@/hooks/use-toast"
 import { useDebouncedSearch } from "@/hooks/use-debounced-search"
 import { Skeleton } from "@/components/ui/skeleton"
+import { ClientOnly } from "@/components/client-only"
+import { HydrationSafe, useIsClient } from "@/components/hydration-safe"
+import { ExtensionSafeWrapper, useIsHydrated } from "@/components/extension-safe-wrapper"
 
 // Lazy load heavy components
 const RoadmapGenerator = lazy(() => import("@/components/roadmap-generator").then(m => ({ default: m.RoadmapGenerator })))
@@ -57,12 +60,14 @@ export default function Page() {
   const [openBulkAdd, setOpenBulkAdd] = useState(false)
   const [filter, setFilter] = useState("all")
   const [debouncedQuery, query, setQuery] = useDebouncedSearch("", 300)
+  const isClient = useIsClient()
+  const isHydrated = useIsHydrated()
 
   useEffect(() => {
-    if (settings.darkMode !== undefined) {
+    if (settings.darkMode !== undefined && isHydrated) {
       setTheme(settings.darkMode ? "dark" : "light")
     }
-  }, [settings.darkMode, setTheme])
+  }, [settings.darkMode, setTheme, isHydrated])
 
   const filteredCourses = useMemo(() => {
     const q = debouncedQuery.trim().toLowerCase()
@@ -113,7 +118,7 @@ export default function Page() {
   }, [dispatch, toast])
 
   return (
-    <main className="mx-auto max-w-7xl px-4 py-6">
+    <main className="mx-auto max-w-7xl px-4 py-6" suppressHydrationWarning>
       <LocalDataSync />
       <OfflineBanner />
       <PWARegister />
@@ -132,34 +137,40 @@ export default function Page() {
             <p className="text-sm text-muted-foreground">Plan, track, and master new skills with an AI copilot.</p>
           </div>
         </div>
-        <div className="flex items-center gap-2">
-          <Button variant="ghost" onClick={() => dispatch(toggleDarkMode())} aria-label="Toggle dark mode">
-            {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
-          </Button>
-          <VoiceCapture onCaptured={(text) => setQuery(text)} />
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button>
-                <Plus className="mr-2 h-4 w-4" />
-                Add Course
-                <ChevronDown className="ml-2 h-4 w-4" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={() => setOpenAdd(true)}>
-                <Plus className="mr-2 h-4 w-4" />
-                Add Single Course
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => setOpenBulkAdd(true)}>
-                <Upload className="mr-2 h-4 w-4" />
-                Advanced Import
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
+        <ExtensionSafeWrapper 
+          fallback={<div className="flex items-center gap-2 h-10 w-48 bg-muted animate-pulse rounded" />}
+        >
+          <div className="flex items-center gap-2">
+            <Button variant="ghost" onClick={() => dispatch(toggleDarkMode())} aria-label="Toggle dark mode">
+              {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+            </Button>
+            <ExtensionSafeWrapper fallback={<Button variant="ghost" disabled><Mic className="h-4 w-4" /></Button>}>
+              <VoiceCapture onCaptured={(text) => setQuery(text)} />
+            </ExtensionSafeWrapper>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button id="add-course-dropdown-trigger">
+                  <Plus className="mr-2 h-4 w-4" />
+                  Add Course
+                  <ChevronDown className="ml-2 h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" id="add-course-dropdown-content">
+                <DropdownMenuItem onClick={() => setOpenAdd(true)} id="add-single-course">
+                  <Plus className="mr-2 h-4 w-4" />
+                  Add Single Course
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setOpenBulkAdd(true)} id="add-bulk-courses">
+                  <Upload className="mr-2 h-4 w-4" />
+                  Advanced Import
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+        </ExtensionSafeWrapper>
       </header>
 
-      <Tabs defaultValue="library" className="space-y-6">
+      <Tabs defaultValue="library" className="space-y-6" suppressHydrationWarning>
         <TabsList className="flex flex-wrap" suppressHydrationWarning>
           <TabsTrigger value="library" className="flex items-center gap-2">
             <Library className="h-4 w-4" /> Library
@@ -219,25 +230,27 @@ export default function Page() {
                     onChange={(e) => setQuery(e.target.value)}
                   />
                 </div>
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button className="whitespace-nowrap">
-                      <Plus className="mr-2 h-4 w-4" />
-                      Quick Add
-                      <ChevronDown className="ml-2 h-4 w-4" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end">
-                    <DropdownMenuItem onClick={() => setOpenAdd(true)}>
-                      <Plus className="mr-2 h-4 w-4" />
-                      Add Single Course
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => setOpenBulkAdd(true)}>
-                      <Upload className="mr-2 h-4 w-4" />
-                      Advanced Import
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
+                <ExtensionSafeWrapper fallback={<div className="h-10 w-32 bg-muted animate-pulse rounded" />}>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button className="whitespace-nowrap" id="quick-add-dropdown-trigger">
+                        <Plus className="mr-2 h-4 w-4" />
+                        Quick Add
+                        <ChevronDown className="ml-2 h-4 w-4" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" id="quick-add-dropdown-content">
+                      <DropdownMenuItem onClick={() => setOpenAdd(true)} id="quick-add-single">
+                        <Plus className="mr-2 h-4 w-4" />
+                        Add Single Course
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => setOpenBulkAdd(true)} id="quick-add-bulk">
+                        <Upload className="mr-2 h-4 w-4" />
+                        Advanced Import
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </ExtensionSafeWrapper>
               </div>
             </CardHeader>
             <Separator />
